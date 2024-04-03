@@ -13,21 +13,28 @@ module ActiveRecordSlave
   #     In a non-Rails environment, supply the environment such as
   #     'development', 'production'
   def self.install!(adapter_class = nil, environment = nil)
-    slave_config =
-      if ActiveRecord::Base.connection.respond_to?(:config)
-        ActiveRecord::Base.connection.config[:slave]
-      else
-        ActiveRecord::Base.configurations[environment || Rails.env]['slave']
-      end
-    if slave_config
-      ActiveRecord::Base.logger.info "ActiveRecordSlave.install! v#{ActiveRecordSlave::VERSION} Establishing connection to slave database"
-      Slave.establish_connection(slave_config)
+    # When the DBMS is not available, an exception (e.g. PG::ConnectionBad) is raised
+    active_db_connection = ActiveRecord::Base.connection.active? rescue false
 
-      # Inject a new #select method into the ActiveRecord Database adapter
-      base = adapter_class || ActiveRecord::Base.connection.class
-      base.send(:include, InstanceMethods)
+    if active_db_connection
+      slave_config =
+        if ActiveRecord::Base.connection.respond_to?(:config)
+          ActiveRecord::Base.connection.config[:slave]
+        else
+          ActiveRecord::Base.configurations[environment || Rails.env]['slave']
+        end
+      if slave_config
+        ActiveRecord::Base.logger.info "ActiveRecordSlave.install! v#{ActiveRecordSlave::VERSION} Establishing connection to slave database"
+        Slave.establish_connection(slave_config)
+
+        # Inject a new #select method into the ActiveRecord Database adapter
+        base = adapter_class || ActiveRecord::Base.connection.class
+        base.send(:include, InstanceMethods)
+      else
+        ActiveRecord::Base.logger.info "ActiveRecordSlave not installed since no slave database defined"
+      end
     else
-      ActiveRecord::Base.logger.info "ActiveRecordSlave not installed since no slave database defined"
+      ActiveRecord::Base.logger.info "ActiveRecord::Base not connected, so not installing ActiveRecordSlave"
     end
   end
 
